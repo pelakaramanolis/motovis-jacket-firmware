@@ -1,4 +1,0 @@
-[wokwi]
-version = 1
-firmware = "build/motovis_firmware.bin"
-elf = "build/motovis_firmware.elf"

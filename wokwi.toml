@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = "firmware/build/motovis_firmware.bin"
+elf = "firmware/build/motovis_firmware.elf"
