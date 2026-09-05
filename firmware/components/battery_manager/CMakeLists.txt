@@ -1,0 +1,5 @@
+idf_component_register(
+    SRCS "battery_manager.c"
+    INCLUDE_DIRS "include"
+    REQUIRES esp_timer
+)

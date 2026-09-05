@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "battery_manager.h"
 
 #define STATUS_LED_GPIO 2
 
@@ -89,20 +90,27 @@ void app_main(void)
 
     xTaskCreate(status_led_task, "status_led", 2048, NULL, 3, NULL);
 
-    /* Walk through the states so we can watch the transitions. */
-    vTaskDelay(pdMS_TO_TICKS(3000));
-    ESP_LOGI(TAG, "pretending BLE started advertising");
-    status_led_set_state(LED_STATE_ADVERTISING);
+    esp_err_t err = battery_manager_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "battery manager failed to start: %s", esp_err_to_name(err));
+        s_led_state = LED_STATE_ERROR;
+    } else {
+        s_led_state = LED_STATE_ADVERTISING;
+    }
 
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    ESP_LOGI(TAG, "pretending a phone connected");
-    status_led_set_state(LED_STATE_CONNECTED);
-
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    ESP_LOGI(TAG, "pretending something broke");
-    status_led_set_state(LED_STATE_ERROR);
+    battery_sample_t sample;
 
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        if (battery_manager_get_latest_sample(&sample)) {
+            ESP_LOGI(TAG, "battery: seq=%lu  %u mV  %u%%  valid=%u",
+                     (unsigned long) sample.sequence,
+                     (unsigned) sample.voltage_mv,
+                     (unsigned) sample.percentage,
+                     (unsigned) sample.valid);
+        } else {
+            ESP_LOGW(TAG, "battery: no sample available");
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(400));
     }
 }
