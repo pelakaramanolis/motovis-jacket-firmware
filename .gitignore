@@ -4,3 +4,4 @@ sdkconfig.old
 managed_components/
 .vscode/
 .DS_Store
+test/crash_test
