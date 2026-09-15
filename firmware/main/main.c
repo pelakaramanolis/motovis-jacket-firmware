@@ -6,6 +6,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "battery_manager.h"
+#include "accel_manager.h"
 
 #define STATUS_LED_GPIO 2
 
@@ -93,22 +94,50 @@ void app_main(void)
     esp_err_t err = battery_manager_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "battery manager failed to start: %s", esp_err_to_name(err));
-        s_led_state = LED_STATE_ERROR;
+        status_led_set_state(LED_STATE_ERROR);
     } else {
-        s_led_state = LED_STATE_ADVERTISING;
+        status_led_set_state(LED_STATE_ADVERTISING);
     }
 
-    battery_sample_t sample;
+    err = accel_manager_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "accel manager failed to start: %s", esp_err_to_name(err));
+        status_led_set_state(LED_STATE_ERROR);
+    }
+
+    battery_sample_t battery;
+    accel_reading_t  accel;
+
+    uint32_t last_battery_seq = 0;
+    uint32_t last_alert_count = 0;
+    uint32_t missed_total     = 0;
 
     while (1) {
-        if (battery_manager_get_latest_sample(&sample)) {
-            ESP_LOGI(TAG, "battery: seq=%lu  %u mV  %u%%  valid=%u",
-                     (unsigned long) sample.sequence,
-                     (unsigned) sample.voltage_mv,
-                     (unsigned) sample.percentage,
-                     (unsigned) sample.valid);
-        } else {
-            ESP_LOGW(TAG, "battery: no sample available");
+        // only log the battery when it's actually a new reading
+        if (battery_manager_get_latest_sample(&battery) && battery.sequence != last_battery_seq) {
+            ESP_LOGI(TAG, "battery: %u mV, %u%%",
+                     (unsigned) battery.voltage_mv,
+                     (unsigned) battery.percentage);
+        }
+
+        if (accel_manager_get_latest(&accel)) {
+            bool caught = (accel.alert != 0);
+
+            // the counter moved since last time
+            uint32_t new_alerts = accel.alert_count - last_alert_count;
+            last_alert_count = accel.alert_count;
+
+            if (caught) {
+                ESP_LOGW(TAG, "caught the alert flag, total=%lu",
+                         (unsigned long) accel.alert_count);
+            } else if (new_alerts > 0) {
+                missed_total += new_alerts;
+                ESP_LOGE(TAG, "MISSED %lu alert(s) - flag was already gone. "
+                              "missed %lu of %lu so far",
+                         (unsigned long) new_alerts,
+                         (unsigned long) missed_total,
+                         (unsigned long) accel.alert_count);
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(400));
