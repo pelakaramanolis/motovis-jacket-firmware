@@ -6,3 +6,4 @@ managed_components/
 .DS_Store
 test/crash_test
 test/nmea_test
+test/pulse_test
