@@ -4,9 +4,12 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
+#include "esp_err.h"
 #include "esp_log.h"
-#include "battery_manager.h"
+
 #include "accel_manager.h"
+#include "battery_manager.h"
+#include "gnss_manager.h"
 
 #define STATUS_LED_GPIO 2
 
@@ -33,7 +36,7 @@ static const char *led_state_name(led_state_t state)
     }
 }
 
-/* Half-period of the blink, in ms. 0 means hold the LED solid on. */
+// half-period of the blink in ms. 0 means hold it solid on
 static uint32_t led_state_period_ms(led_state_t state)
 {
     switch (state) {
@@ -53,7 +56,7 @@ static void status_led_set_state(led_state_t state)
 static void status_led_task(void *arg)
 {
     bool led_on = false;
-    int last_logged = -1;
+    int  last_logged = -1;
 
     while (1) {
         led_state_t state = s_led_state;
@@ -105,25 +108,39 @@ void app_main(void)
         status_led_set_state(LED_STATE_ERROR);
     }
 
+    err = gnss_manager_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "gnss manager failed to start: %s", esp_err_to_name(err));
+    }
+
     battery_sample_t battery;
     accel_reading_t  accel;
+    gnss_reading_t   gps;
 
     uint32_t last_battery_seq = 0;
+    uint32_t last_gps_seq     = 0;
     uint32_t last_alert_count = 0;
     uint32_t missed_total     = 0;
 
     while (1) {
-        // only log the battery when it's actually a new reading
-        if (battery_manager_get_latest_sample(&battery) && battery.sequence != last_battery_seq) {
+        if (battery_manager_get_latest_sample(&battery) &&
+            battery.sequence != last_battery_seq) {
+            last_battery_seq = battery.sequence;
             ESP_LOGI(TAG, "battery: %u mV, %u%%",
                      (unsigned) battery.voltage_mv,
                      (unsigned) battery.percentage);
         }
 
+        if (gnss_manager_get_latest(&gps) && gps.sequence != last_gps_seq) {
+            last_gps_seq = gps.sequence;
+            ESP_LOGI(TAG, "gps: lat=%ld lon=%ld sats=%u valid=%u",
+                     (long) gps.lat_e7, (long) gps.lon_e7,
+                     (unsigned) gps.satellites, (unsigned) gps.fix_valid);
+        }
+
         if (accel_manager_get_latest(&accel)) {
             bool caught = (accel.alert != 0);
 
-            // the counter moved since last time
             uint32_t new_alerts = accel.alert_count - last_alert_count;
             last_alert_count = accel.alert_count;
 
