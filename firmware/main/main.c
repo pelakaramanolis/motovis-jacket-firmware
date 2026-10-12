@@ -10,6 +10,7 @@
 #include "accel_manager.h"
 #include "battery_manager.h"
 #include "gnss_manager.h"
+#include "heart_manager.h"
 
 #define STATUS_LED_GPIO 2
 
@@ -113,12 +114,19 @@ void app_main(void)
         ESP_LOGE(TAG, "gnss manager failed to start: %s", esp_err_to_name(err));
     }
 
+    err = heart_manager_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "heart manager failed to start: %s", esp_err_to_name(err));
+    }
+
     battery_sample_t battery;
     accel_reading_t  accel;
     gnss_reading_t   gps;
+    heart_reading_t  heart;
 
     uint32_t last_battery_seq = 0;
     uint32_t last_gps_seq     = 0;
+    uint32_t last_beat_count  = 0;
     uint32_t last_alert_count = 0;
     uint32_t missed_total     = 0;
 
@@ -136,6 +144,17 @@ void app_main(void)
             ESP_LOGI(TAG, "gps: lat=%ld lon=%ld sats=%u valid=%u",
                      (long) gps.lat_e7, (long) gps.lon_e7,
                      (unsigned) gps.satellites, (unsigned) gps.fix_valid);
+        }
+
+        // beat_count is cumulative, so a slow reader still sees every beat
+        if (heart_manager_get_latest(&heart) &&
+            heart.beat_count != last_beat_count) {
+            uint32_t new_beats = heart.beat_count - last_beat_count;
+            last_beat_count = heart.beat_count;
+            ESP_LOGI(TAG, "heart: %u bpm (valid=%u), %lu new beat(s), %lu total",
+                     (unsigned) heart.bpm, (unsigned) heart.bpm_valid,
+                     (unsigned long) new_beats,
+                     (unsigned long) heart.beat_count);
         }
 
         if (accel_manager_get_latest(&accel)) {
