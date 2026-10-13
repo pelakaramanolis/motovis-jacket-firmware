@@ -107,7 +107,7 @@ system was concerned.
 In practice this loses **100% of alerts, not the 75% you would predict**.
 400 ms is an exact multiple of 100 ms, so the reader lands on the same point
 in the producer's cycle every single time and repeats the identical miss
-forever. Had the periods been unrelated - 100 ms against 430 ms, say - the
+forever. Had the periods been unrelated (100 ms against 430 ms for example) the
 phase would drift and some alerts would be caught. Being an exact multiple
 is what turns intermittent loss into total loss, and it is why the bug never
 showed up as flakiness.
