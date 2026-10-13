@@ -13,13 +13,17 @@ PULSE_SRC := ../firmware/components/heart_manager/pulse_detect.c test_pulse_dete
 DEB_INC   := -I../firmware/components/jacket_controls/include
 DEB_SRC   := ../firmware/components/jacket_controls/debounce.c test_debounce.c
 
+ALERT_INC := -I../firmware/components/alert_manager/include -I../firmware/components/event_bus/include
+ALERT_SRC := ../firmware/components/alert_manager/alert_state.c test_alert_state.c
+
 .PHONY: test clean
 
-test: crash_test nmea_test pulse_test debounce_test
+test: crash_test nmea_test pulse_test debounce_test alert_test
 	./crash_test
 	./nmea_test
 	./pulse_test
 	./debounce_test
+	./alert_test
 
 crash_test: $(CRASH_SRC)
 	$(CC) $(CFLAGS) $(CRASH_INC) $(CRASH_SRC) -o $@
@@ -33,5 +37,8 @@ pulse_test: $(PULSE_SRC)
 debounce_test: $(DEB_SRC)
 	$(CC) $(CFLAGS) $(DEB_INC) $(DEB_SRC) -o $@
 
+alert_test: $(ALERT_SRC)
+	$(CC) $(CFLAGS) $(ALERT_INC) $(ALERT_SRC) -o $@
+
 clean:
-	rm -f crash_test nmea_test pulse_test debounce_test
+	rm -f crash_test nmea_test pulse_test debounce_test alert_test

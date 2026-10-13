@@ -6,7 +6,9 @@
 #include "driver/gpio.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
+#include "alert_state.h"
 #include "event_bus.h"
 
 #include "accel_manager.h"
@@ -16,6 +18,9 @@
 #include "jacket_controls.h"
 
 #define STATUS_LED_GPIO 2
+
+// how long the rider gets to cancel before it goes out
+#define ALERT_WINDOW_MS 5000
 
 static const char *TAG = "motovis";
 static const char *LED_TAG = "led";
@@ -28,6 +33,11 @@ typedef enum {
 } led_state_t;
 
 static volatile led_state_t s_led_state = LED_STATE_BOOTING;
+
+static uint32_t now_ms(void)
+{
+    return (uint32_t) (esp_timer_get_time() / 1000ULL);
+}
 
 static const char *led_state_name(led_state_t state)
 {
@@ -150,6 +160,9 @@ void app_main(void)
     uint32_t missed_total     = 0;
     bool     last_fix_valid   = false;
 
+    alert_state_t alert;
+    alert_state_init(&alert, ALERT_WINDOW_MS);
+
     while (1) {
         if (battery_manager_get_latest_sample(&battery) &&
             battery.sequence != last_battery_seq) {
@@ -224,6 +237,26 @@ void app_main(void)
                          (unsigned long) bus_ev.timestamp_ms,
                          (unsigned long) event_bus_dropped());
             }
+
+            // every event goes past the alert logic too
+            if (alert_state_event(&alert, &bus_ev)) {
+                ESP_LOGW(TAG, "alert: %s", alert_phase_name(alert.phase));
+            }
+        }
+
+        // the window running out isn't an event, so we have to go looking
+        if (alert_state_tick(&alert, now_ms())) {
+            ESP_LOGE(TAG, "alert: CONFIRMED - would send %d, %d, %d mg "
+                          "from %lu ms (%lu sent, %lu cancelled)",
+                     alert.x_mg, alert.y_mg, alert.z_mg,
+                     (unsigned long) alert.crash_at_ms,
+                     (unsigned long) alert.confirmed_count,
+                     (unsigned long) alert.cancelled_count);
+        }
+
+        // dealt with it, so let the next one through
+        if (alert.phase == ALERT_CONFIRMED || alert.phase == ALERT_CANCELLED) {
+            alert_state_ack(&alert);
         }
 
         vTaskDelay(pdMS_TO_TICKS(400));
