@@ -83,9 +83,9 @@ static void status_led_task(void *arg)
     }
 }
 
-static const char *button_label(jacket_button_t b)
+static const char *button_label(event_button_t b)
 {
-    return (b == JACKET_BUTTON_PAIRING) ? "pairing" : "alert-cancel";
+    return (b == EVENT_BUTTON_PAIRING) ? "pairing" : "alert-cancel";
 }
 
 void app_main(void)
@@ -141,8 +141,7 @@ void app_main(void)
     accel_reading_t       accel;
     gnss_reading_t        gps;
     heart_reading_t       heart;
-    jacket_button_event_t ev;
-    event_t               bus_ev;
+    event_t bus_ev;
 
     uint32_t last_battery_seq = 0;
     uint32_t last_gps_seq     = 0;
@@ -184,17 +183,6 @@ void app_main(void)
                      (unsigned long) heart.beat_count);
         }
 
-        // drain the queue completely. every event is still here waiting,
-        // however long it's been since we last looked
-        while (jacket_controls_get_event(&ev, 0)) {
-            ESP_LOGI(TAG, "button: %s %s (seq %lu, at %lu ms, %lu dropped)",
-                     button_label(ev.button),
-                     ev.pressed ? "pressed" : "released",
-                     (unsigned long) ev.sequence,
-                     (unsigned long) ev.timestamp_ms,
-                     (unsigned long) jacket_controls_dropped());
-        }
-
         if (accel_manager_get_latest(&accel)) {
             bool caught = (accel.alert != 0);
 
@@ -221,6 +209,12 @@ void app_main(void)
                          bus_ev.data.crash.x_mg,
                          bus_ev.data.crash.y_mg,
                          bus_ev.data.crash.z_mg,
+                         (unsigned long) bus_ev.sequence,
+                         (unsigned long) bus_ev.timestamp_ms);
+            } else if (bus_ev.kind == EVENT_BUTTON) {
+                ESP_LOGI(TAG, "event: button %s %s (seq %lu, at %lu ms)",
+                         button_label(bus_ev.data.button.button),
+                         bus_ev.data.button.pressed ? "pressed" : "released",
                          (unsigned long) bus_ev.sequence,
                          (unsigned long) bus_ev.timestamp_ms);
             } else {
