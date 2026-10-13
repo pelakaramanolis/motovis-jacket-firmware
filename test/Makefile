@@ -1,7 +1,7 @@
 CC     ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -O1 -g
 
-CRASH_INC := -I../firmware/components/accel_manager/include
+CRASH_INC := -I../firmware/components/accel_manager/include -DCRASH_DETECT_WITH_NAIVE
 CRASH_SRC := ../firmware/components/accel_manager/crash_detect.c test_crash_detect.c
 
 NMEA_INC  := -I../firmware/components/gnss_manager/include

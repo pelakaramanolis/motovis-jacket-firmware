@@ -11,6 +11,10 @@ typedef struct {
     int16_t  y_mg;
     int16_t  z_mg;
 
+    // the original's transient flag. it gets overwritten by the next
+    // sample, so don't trust it to tell you a crash happened - it's
+    // here because the ble accel packet carries it. the reliable
+    // path is EVENT_CRASH on the event bus
     uint8_t  alert;
 
     // how many crashes we've detected since boot

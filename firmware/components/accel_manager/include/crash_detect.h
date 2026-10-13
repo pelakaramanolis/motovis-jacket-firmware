@@ -15,6 +15,10 @@ typedef struct {
 // earth's gravity
 #define CRASH_GRAVITY_MG 1000
 
+// the first version, kept so the tests can show what it gets wrong.
+// the test build defines this, the firmware doesn't
+#ifdef CRASH_DETECT_WITH_NAIVE
+
 /*
  * magnitude of the difference between consecutive raw samples
  * tests can demonstrate exactly what it gets wrong
@@ -29,6 +33,8 @@ typedef struct {
 
 void crash_naive_init(crash_naive_t *d, int32_t threshold_mg);
 bool crash_naive_update(crash_naive_t *d, const accel_sample_t *s);
+
+#endif // CRASH_DETECT_WITH_NAIVE
 
 /*
  * tests how far total acceleration magnitude

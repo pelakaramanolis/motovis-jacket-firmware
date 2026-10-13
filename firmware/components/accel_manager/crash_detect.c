@@ -7,6 +7,8 @@ static int64_t magnitude_squared(int32_t x, int32_t y, int32_t z)
 
 //naive detector
 
+#ifdef CRASH_DETECT_WITH_NAIVE
+
 void crash_naive_init(crash_naive_t *d, int32_t threshold_mg)
 {
     d->threshold_mg = threshold_mg;
@@ -40,6 +42,7 @@ bool crash_naive_update(crash_naive_t *d, const accel_sample_t *s)
 
 // corrected detector
 
+#endif // CRASH_DETECT_WITH_NAIVE
 void crash_detector_init(crash_detector_t *d, int32_t threshold_mg,
                          uint32_t refractory_ms)
 {

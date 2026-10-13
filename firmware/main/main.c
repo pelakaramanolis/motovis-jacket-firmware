@@ -23,6 +23,11 @@
 // how long the rider gets to cancel before it goes out
 #define ALERT_WINDOW_MS 5000
 
+// counts how many crash alerts the old transient flag loses, next to
+// the same crashes arriving safely on the bus. instrumentation, on
+// purpose - set to 0 and the flag is simply ignored
+#define DEMO_SHOW_FLAG_LOSS 1
+
 static const char *TAG = "motovis";
 static const char *LED_TAG = "led";
 
@@ -163,8 +168,10 @@ void app_main(void)
     uint32_t last_battery_seq = 0;
     uint32_t last_gps_seq     = 0;
     uint32_t last_beat_count  = 0;
+#if DEMO_SHOW_FLAG_LOSS
     uint32_t last_alert_count = 0;
     uint32_t missed_total     = 0;
+#endif
     bool     last_fix_valid   = false;
 
     alert_state_t alert;
@@ -230,6 +237,7 @@ void app_main(void)
         }
 
         if (accel_manager_get_latest(&accel)) {
+#if DEMO_SHOW_FLAG_LOSS
             bool caught = (accel.alert != 0);
 
             uint32_t new_alerts = accel.alert_count - last_alert_count;
@@ -246,6 +254,7 @@ void app_main(void)
                          (unsigned long) missed_total,
                          (unsigned long) accel.alert_count);
             }
+#endif
 
             motovis_accel_payload_t apl = {
                 .timestamp_ms = accel.timestamp_ms,
