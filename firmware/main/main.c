@@ -11,6 +11,7 @@
 #include "battery_manager.h"
 #include "gnss_manager.h"
 #include "heart_manager.h"
+#include "jacket_controls.h"
 
 #define STATUS_LED_GPIO 2
 
@@ -80,6 +81,11 @@ static void status_led_task(void *arg)
     }
 }
 
+static const char *button_label(jacket_button_t b)
+{
+    return (b == JACKET_BUTTON_PAIRING) ? "pairing" : "alert-cancel";
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "MotoVis jacket firmware starting");
@@ -119,10 +125,16 @@ void app_main(void)
         ESP_LOGE(TAG, "heart manager failed to start: %s", esp_err_to_name(err));
     }
 
-    battery_sample_t battery;
-    accel_reading_t  accel;
-    gnss_reading_t   gps;
-    heart_reading_t  heart;
+    err = jacket_controls_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "jacket controls failed to start: %s", esp_err_to_name(err));
+    }
+
+    battery_sample_t      battery;
+    accel_reading_t       accel;
+    gnss_reading_t        gps;
+    heart_reading_t       heart;
+    jacket_button_event_t ev;
 
     uint32_t last_battery_seq = 0;
     uint32_t last_gps_seq     = 0;
@@ -146,7 +158,6 @@ void app_main(void)
                      (unsigned) gps.satellites, (unsigned) gps.fix_valid);
         }
 
-        // beat_count is cumulative, so a slow reader still sees every beat
         if (heart_manager_get_latest(&heart) &&
             heart.beat_count != last_beat_count) {
             uint32_t new_beats = heart.beat_count - last_beat_count;
@@ -155,6 +166,17 @@ void app_main(void)
                      (unsigned) heart.bpm, (unsigned) heart.bpm_valid,
                      (unsigned long) new_beats,
                      (unsigned long) heart.beat_count);
+        }
+
+        // drain the queue completely. every event is still here waiting,
+        // however long it's been since we last looked
+        while (jacket_controls_get_event(&ev, 0)) {
+            ESP_LOGI(TAG, "button: %s %s (seq %lu, at %lu ms, %lu dropped)",
+                     button_label(ev.button),
+                     ev.pressed ? "pressed" : "released",
+                     (unsigned long) ev.sequence,
+                     (unsigned long) ev.timestamp_ms,
+                     (unsigned long) jacket_controls_dropped());
         }
 
         if (accel_manager_get_latest(&accel)) {

@@ -10,12 +10,16 @@ NMEA_SRC  := ../firmware/components/gnss_manager/nmea.c test_nmea.c
 PULSE_INC := -I../firmware/components/heart_manager/include
 PULSE_SRC := ../firmware/components/heart_manager/pulse_detect.c test_pulse_detect.c
 
+DEB_INC   := -I../firmware/components/jacket_controls/include
+DEB_SRC   := ../firmware/components/jacket_controls/debounce.c test_debounce.c
+
 .PHONY: test clean
 
-test: crash_test nmea_test pulse_test
+test: crash_test nmea_test pulse_test debounce_test
 	./crash_test
 	./nmea_test
 	./pulse_test
+	./debounce_test
 
 crash_test: $(CRASH_SRC)
 	$(CC) $(CFLAGS) $(CRASH_INC) $(CRASH_SRC) -o $@
@@ -26,5 +30,8 @@ nmea_test: $(NMEA_SRC)
 pulse_test: $(PULSE_SRC)
 	$(CC) $(CFLAGS) $(PULSE_INC) $(PULSE_SRC) -o $@
 
+debounce_test: $(DEB_SRC)
+	$(CC) $(CFLAGS) $(DEB_INC) $(DEB_SRC) -o $@
+
 clean:
-	rm -f crash_test nmea_test pulse_test
+	rm -f crash_test nmea_test pulse_test debounce_test

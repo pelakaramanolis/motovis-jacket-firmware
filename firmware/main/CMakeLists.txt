@@ -1,5 +1,5 @@
 idf_component_register(
     SRCS "main.c"
     INCLUDE_DIRS "."
-    REQUIRES esp_driver_gpio battery_manager accel_manager gnss_manager heart_manager
+    REQUIRES esp_driver_gpio battery_manager accel_manager gnss_manager heart_manager jacket_controls
 )

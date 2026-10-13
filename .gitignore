@@ -7,3 +7,4 @@ managed_components/
 test/crash_test
 test/nmea_test
 test/pulse_test
+test/debounce_test
