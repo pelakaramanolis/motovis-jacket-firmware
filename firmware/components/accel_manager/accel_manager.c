@@ -6,6 +6,8 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#include "event_bus.h"
+
 #include "accel_manager.h"
 #include "adxl345.h"
 #include "crash_detect.h"
@@ -120,6 +122,14 @@ static void accel_task(void *arg)
 
             if (alert) {
                 ESP_LOGW(TAG, "crash detected: %d, %d, %d mg", x, y, z);
+
+                // the flag in the snapshot gets overwritten 100 ms from now.
+                // this one waits until somebody takes it
+                event_t ev = {
+                    .kind = EVENT_CRASH,
+                    .data.crash = { .x_mg = x, .y_mg = y, .z_mg = z },
+                };
+                event_bus_publish(&ev);
             }
 
             store(x, y, z, alert);

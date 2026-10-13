@@ -7,6 +7,8 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
+#include "event_bus.h"
+
 #include "accel_manager.h"
 #include "battery_manager.h"
 #include "gnss_manager.h"
@@ -101,6 +103,11 @@ void app_main(void)
 
     xTaskCreate(status_led_task, "status_led", 2048, NULL, 3, NULL);
 
+    if (!event_bus_init()) {
+        ESP_LOGE(TAG, "event bus failed to start");
+        status_led_set_state(LED_STATE_ERROR);
+    }
+
     esp_err_t err = battery_manager_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "battery manager failed to start: %s", esp_err_to_name(err));
@@ -135,12 +142,14 @@ void app_main(void)
     gnss_reading_t        gps;
     heart_reading_t       heart;
     jacket_button_event_t ev;
+    event_t               bus_ev;
 
     uint32_t last_battery_seq = 0;
     uint32_t last_gps_seq     = 0;
     uint32_t last_beat_count  = 0;
     uint32_t last_alert_count = 0;
     uint32_t missed_total     = 0;
+    bool     last_fix_valid   = false;
 
     while (1) {
         if (battery_manager_get_latest_sample(&battery) &&
@@ -156,6 +165,13 @@ void app_main(void)
             ESP_LOGI(TAG, "gps: lat=%ld lon=%ld sats=%u valid=%u",
                      (long) gps.lat_e7, (long) gps.lon_e7,
                      (unsigned) gps.satellites, (unsigned) gps.fix_valid);
+
+            // the snapshot says what is true now. the bus says what changed
+            if (gps.fix_valid != last_fix_valid) {
+                last_fix_valid = gps.fix_valid;
+                bus_ev.kind = last_fix_valid ? EVENT_FIX_GAINED : EVENT_FIX_LOST;
+                event_bus_publish(&bus_ev);
+            }
         }
 
         if (heart_manager_get_latest(&heart) &&
@@ -195,6 +211,24 @@ void app_main(void)
                          (unsigned long) new_alerts,
                          (unsigned long) missed_total,
                          (unsigned long) accel.alert_count);
+            }
+        }
+
+        // one place to see everything that happened, in order
+        while (event_bus_take(&bus_ev, 0)) {
+            if (bus_ev.kind == EVENT_CRASH) {
+                ESP_LOGW(TAG, "event: CRASH %d, %d, %d mg (seq %lu, at %lu ms)",
+                         bus_ev.data.crash.x_mg,
+                         bus_ev.data.crash.y_mg,
+                         bus_ev.data.crash.z_mg,
+                         (unsigned long) bus_ev.sequence,
+                         (unsigned long) bus_ev.timestamp_ms);
+            } else {
+                ESP_LOGI(TAG, "event: %s (seq %lu, at %lu ms, %lu dropped)",
+                         event_kind_name(bus_ev.kind),
+                         (unsigned long) bus_ev.sequence,
+                         (unsigned long) bus_ev.timestamp_ms,
+                         (unsigned long) event_bus_dropped());
             }
         }
 
