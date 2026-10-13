@@ -9,6 +9,7 @@
 #include "esp_timer.h"
 
 #include "alert_state.h"
+#include "ble_server.h"
 #include "event_bus.h"
 
 #include "accel_manager.h"
@@ -147,6 +148,12 @@ void app_main(void)
         ESP_LOGE(TAG, "jacket controls failed to start: %s", esp_err_to_name(err));
     }
 
+    err = ble_server_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ble server failed to start: %s", esp_err_to_name(err));
+        status_led_set_state(LED_STATE_ERROR);
+    }
+
     battery_sample_t      battery;
     accel_reading_t       accel;
     gnss_reading_t        gps;
@@ -170,6 +177,16 @@ void app_main(void)
             ESP_LOGI(TAG, "battery: %u mV, %u%%",
                      (unsigned) battery.voltage_mv,
                      (unsigned) battery.percentage);
+
+            // no raw adc in our battery manager, so that field stays 0
+            motovis_battery_payload_t bp = {
+                .timestamp_ms  = battery.timestamp_ms,
+                .voltage_mv    = battery.voltage_mv,
+                .raw_adc       = 0,
+                .percentage    = battery.percentage,
+                .battery_valid = battery.valid,
+            };
+            ble_server_publish(BLE_CHAR_BATTERY, &bp, sizeof(bp));
         }
 
         if (gnss_manager_get_latest(&gps) && gps.sequence != last_gps_seq) {
@@ -184,6 +201,14 @@ void app_main(void)
                 bus_ev.kind = last_fix_valid ? EVENT_FIX_GAINED : EVENT_FIX_LOST;
                 event_bus_publish(&bus_ev);
             }
+
+            motovis_gps_payload_t gp = {
+                .timestamp_ms = gps.timestamp_ms,
+                .latitude_e7  = gps.lat_e7,
+                .longitude_e7 = gps.lon_e7,
+                .fix_valid    = gps.fix_valid,
+            };
+            ble_server_publish(BLE_CHAR_GPS, &gp, sizeof(gp));
         }
 
         if (heart_manager_get_latest(&heart) &&
@@ -194,6 +219,14 @@ void app_main(void)
                      (unsigned) heart.bpm, (unsigned) heart.bpm_valid,
                      (unsigned long) new_beats,
                      (unsigned long) heart.beat_count);
+
+            motovis_heart_payload_t hp = {
+                .timestamp_ms = heart.timestamp_ms,
+                .bpm          = heart.bpm,
+                .raw_adc      = heart.raw,
+                .bpm_valid    = heart.bpm_valid,
+            };
+            ble_server_publish(BLE_CHAR_HEART, &hp, sizeof(hp));
         }
 
         if (accel_manager_get_latest(&accel)) {
@@ -213,6 +246,15 @@ void app_main(void)
                          (unsigned long) missed_total,
                          (unsigned long) accel.alert_count);
             }
+
+            motovis_accel_payload_t apl = {
+                .timestamp_ms = accel.timestamp_ms,
+                .ax_mg        = accel.x_mg,
+                .ay_mg        = accel.y_mg,
+                .az_mg        = accel.z_mg,
+                .alert        = accel.alert,
+            };
+            ble_server_publish(BLE_CHAR_ACCEL, &apl, sizeof(apl));
         }
 
         // one place to see everything that happened, in order
@@ -254,9 +296,31 @@ void app_main(void)
                      (unsigned long) alert.cancelled_count);
         }
 
-        // dealt with it, so let the next one through
         if (alert.phase == ALERT_CONFIRMED || alert.phase == ALERT_CANCELLED) {
+            // the value stays in the attribute table, so a phone that
+            // connects later can still read what happened
+            motovis_alert_payload_t alp = {
+                .crash_at_ms  = alert.crash_at_ms,
+                .latitude_e7  = gps.lat_e7,
+                .longitude_e7 = gps.lon_e7,
+                .ax_mg        = alert.x_mg,
+                .ay_mg        = alert.y_mg,
+                .az_mg        = alert.z_mg,
+                .flags        = (uint8_t) ((gps.fix_valid ? MOTOVIS_ALERT_FLAG_FIX_VALID : 0) |
+                                           (alert.phase == ALERT_CANCELLED
+                                                ? MOTOVIS_ALERT_FLAG_CANCELLED : 0)),
+                .sequence     = (uint8_t) (alert.confirmed_count + alert.cancelled_count),
+            };
+            ble_server_publish(BLE_CHAR_ALERT, &alp, sizeof(alp));
+
+            // dealt with it, so let the next one through
             alert_state_ack(&alert);
+        }
+
+        // the led finally means something real
+        if (s_led_state != LED_STATE_ERROR) {
+            status_led_set_state(ble_server_connected()
+                                     ? LED_STATE_CONNECTED : LED_STATE_ADVERTISING);
         }
 
         vTaskDelay(pdMS_TO_TICKS(400));
